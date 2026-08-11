@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credenciamento - Sala Fechada</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, Arial, sans-serif;
+    background: #111;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 8px 0 16px; }
+  #reader { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; }
+  #resultado {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 420px;
+    padding: 24px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    display: none;
+  }
+  .ok { background: #1b5e20; }
+  .erro { background: #b71c1c; }
+  .aviso { background: #e65100; }
+  #resultado span { display: block; font-size: 15px; font-weight: 400; margin-top: 8px; opacity: 0.9; }
+  #status { margin-top: 12px; opacity: 0.6; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>Credenciamento — Sala Fechada</h1>
+  <div id="reader"></div>
+  <div id="resultado"></div>
+  <div id="status">Aponte a câmera para o QR code do convidado</div>
+
+<script>
+  // COLE AQUI a URL do App da Web do Apps Script (conta pessoal, termina em /exec)
+  const API_URL = "https://script.google.com/macros/s/AKfycbwgkts5_o7Q9jR807Qpoj6qTzxHJ8wzKiA2J9g9vVggRJVU4GEYiHRK5LtXvPqwRhrj/exec";
+
+  let processando = false;
+
+  function mostrarResultado(classe, titulo, subtitulo) {
+    const div = document.getElementById("resultado");
+    div.className = classe;
+    div.style.display = "block";
+    div.innerHTML = titulo + (subtitulo ? "<span>" + subtitulo + "</span>" : "");
+    setTimeout(() => { div.style.display = "none"; processando = false; }, 3000);
+  }
+
+  function onScanSuccess(decodedText) {
+    if (processando) return;
+    processando = true;
+    document.getElementById("status").textContent = "Verificando...";
+
+    const callbackName = "jsonp_cb_" + Date.now();
+    let finalizado = false;
+
+    const timeout = setTimeout(() => {
+      if (finalizado) return;
+      finalizado = true;
+      mostrarResultado("aviso", "Erro de conexão", "Verifique a internet");
+      document.getElementById("status").textContent = "Aponte a câmera para o QR code do convidado";
+      limpar();
+    }, 8000);
+
+    function limpar() {
+      delete window[callbackName];
+      const s = document.getElementById(callbackName);
+      if (s) s.remove();
+    }
+
+    window[callbackName] = function(data) {
+      if (finalizado) return;
+      finalizado = true;
+      clearTimeout(timeout);
+
+      if (data.status === "ok") {
+        mostrarResultado("ok", "✔ Entrada liberada", data.nome);
+      } else if (data.status === "ja_usado") {
+        mostrarResultado("erro", "✘ Código já utilizado", data.nome || "");
+      } else if (data.status === "nao_encontrado") {
+        mostrarResultado("erro", "✘ Código não encontrado", decodedText);
+      } else {
+        mostrarResultado("aviso", "Erro na verificação", data.mensagem || "");
+      }
+      document.getElementById("status").textContent = "Aponte a câmera para o QR code do convidado";
+      limpar();
+    };
+
+    const script = document.createElement("script");
+    script.id = callbackName;
+    script.src = API_URL + "?code=" + encodeURIComponent(decodedText) + "&callback=" + callbackName;
+    document.body.appendChild(script);
+  }
+
+  const html5QrCode = new Html5Qrcode("reader");
+  html5QrCode.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: 250 },
+    onScanSuccess
+  ).catch(err => {
+    document.getElementById("status").textContent = "Não foi possível acessar a câmera: " + err;
+  });
+</script>
+</body>
+</html>
